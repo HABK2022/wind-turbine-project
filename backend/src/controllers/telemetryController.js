@@ -22,6 +22,7 @@ const createTelemetry = async (req, res) => {
     }
 };
 
+
 /**
  * GET /api/telemetry/latest
  * Return the most recent telemetry record.
