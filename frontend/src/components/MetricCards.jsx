@@ -36,7 +36,7 @@ const metrics = [
         ),
     },
     {
-        key: 'current', label: 'Current', unit: 'A', decimals: 2,
+        key: 'current', label: 'Current', unit: 'A', decimals: 3,
         subtitle: 'Electrical current', color: 'var(--color-current)',
         icon: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

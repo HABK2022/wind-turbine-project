@@ -3,6 +3,8 @@ import { usePolling } from './hooks/usePolling';
 import Header from './components/Header';
 import MetricCards from './components/MetricCards';
 import TurbineVisualization from './components/TurbineVisualization';
+import PitchControl from './components/PitchControl';
+import MotionPanel from './components/MotionPanel';
 import LiveChart from './components/LiveChart';
 import ExperimentComparison from './components/ExperimentComparison';
 import SummaryPanel from './components/SummaryPanel';
@@ -50,12 +52,22 @@ function App() {
           <TurbineVisualization data={latest} />
         </section>
 
-        {/* ═══ SECTION 4: Live Trend Chart ═══ */}
+        {/* ═══ SECTION 4: Blade Pitch Control ═══ */}
+        <section className="dashboard-section" id="section-pitch-control">
+          <PitchControl data={latest} />
+        </section>
+
+        {/* ═══ SECTION 5: Platform Motion (9-DOF) ═══ */}
+        <section className="dashboard-section" id="section-motion">
+          <MotionPanel data={latest} chartData={chartData} />
+        </section>
+
+        {/* ═══ SECTION 6: Live Trend Chart ═══ */}
         <section className="dashboard-section" id="section-chart">
           <LiveChart data={chartData} />
         </section>
 
-        {/* ═══ SECTION 5: Experiments ═══ */}
+        {/* ═══ SECTION 7: Experiments ═══ */}
         <section className="dashboard-section" id="section-experiments">
           <ExperimentComparison
             onExperimentChange={setExperimentId}
@@ -63,7 +75,7 @@ function App() {
           />
         </section>
 
-        {/* ═══ SECTION 6: Power Analysis ═══ */}
+        {/* ═══ SECTION 8: Power Analysis ═══ */}
         <section className="dashboard-section" id="section-power">
           <div className="section-label">
             <svg className="section-label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -79,17 +91,17 @@ function App() {
           <PowerCharts experimentId={experimentId} />
         </section>
 
-        {/* ═══ SECTION 7: Summary Statistics ═══ */}
+        {/* ═══ SECTION 9: Summary Statistics ═══ */}
         <section className="dashboard-section" id="section-summary">
           <SummaryPanel experimentId={experimentId} />
         </section>
 
-        {/* ═══ SECTION 8: Historical Data ═══ */}
+        {/* ═══ SECTION 10: Historical Data ═══ */}
         <section className="dashboard-section" id="section-history">
           <HistoryTable experimentId={experimentId} />
         </section>
 
-        {/* ═══ SECTION 9: System Health ═══ */}
+        {/* ═══ SECTION 11: System Health ═══ */}
         <section className="dashboard-section" id="section-health">
           <SystemHealth
             isConnected={isConnected}

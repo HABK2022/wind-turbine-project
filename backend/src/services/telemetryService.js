@@ -11,6 +11,25 @@ let currentLatest = null;
  * Save a validated telemetry record.
  * Calculates power from voltage × current (server-side).
  * Updates the in-memory latest cache after saving.
+ *
+ * POWER CALCULATION — deliberately unchanged.
+ *
+ *   power = voltage × current
+ *
+ * This remains the single server-side source of truth, exactly as before, and
+ * the data source is still not allowed to supply `power` itself.
+ *
+ * The calibration relationship V = I × 41 + 2 (and the P = I² × 41 + 2I that
+ * follows from it, since I × (41I + 2) = 41I² + 2I) describes how voltage and
+ * current relate *on the physical rig*. It is therefore a property of the
+ * measurement source, not of this server: whoever produces the reading decides
+ * how voltage is obtained, and this server multiplies whatever voltage and
+ * current it is given. The simulator applies that relationship when generating
+ * values (see scripts/liveSimulator.js) so its packets are self-consistent.
+ *
+ * Whether the real ESP32 should report the INA219's independently measured bus
+ * voltage, or a voltage derived from current via that calibration, is still an
+ * open hardware decision and is intentionally NOT settled here.
  */
 const saveTelemetry = async (data) => {
     const power = data.voltage * data.current;
@@ -19,12 +38,22 @@ const saveTelemetry = async (data) => {
         experimentId: data.experimentId,
         source: data.source || 'simulator',
         timestamp: data.timestamp || new Date(),
+        // ?? rather than ||: stepperPosition 0 and timeStep 0 are real values,
+        // not "missing". Only undefined/null fall through to null.
+        timeStep: data.timeStep ?? null,
         windSpeed: data.windSpeed,
         pitchAngle: data.pitchAngle,
-        stepperPosition: data.stepperPosition || null,
+        stepperPosition: data.stepperPosition ?? null,
         voltage: data.voltage,
         current: data.current,
         power,
+        // Platform motion, 9-DOF. Absent from older/simpler sources → null.
+        gyroX: data.gyroX ?? null,
+        gyroY: data.gyroY ?? null,
+        gyroZ: data.gyroZ ?? null,
+        accelerometerX: data.accelerometerX ?? null,
+        accelerometerY: data.accelerometerY ?? null,
+        accelerometerZ: data.accelerometerZ ?? null,
     });
 
     const saved = await telemetry.save();

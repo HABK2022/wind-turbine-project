@@ -55,16 +55,27 @@ export function usePolling() {
                 }
                 prevTimestampRef.current = currentTimestamp;
 
-                // Append to rolling chart buffer
+                // Append to rolling chart buffer.
+                // Every numeric telemetry field is retained here, so the chart
+                // can plot any of them without a second request. Fields a
+                // record does not carry (older records predate the 9-DOF
+                // fields) arrive as null and are simply not drawn.
                 setChartData(prev => {
                     const point = {
                         time: new Date(res.data.timestamp).toLocaleTimeString(),
+                        timeStep: res.data.timeStep,
                         windSpeed: res.data.windSpeed,
                         power: res.data.power,
                         voltage: res.data.voltage,
                         current: res.data.current,
                         pitchAngle: res.data.pitchAngle,
                         stepperPosition: res.data.stepperPosition,
+                        gyroX: res.data.gyroX,
+                        gyroY: res.data.gyroY,
+                        gyroZ: res.data.gyroZ,
+                        accelerometerX: res.data.accelerometerX,
+                        accelerometerY: res.data.accelerometerY,
+                        accelerometerZ: res.data.accelerometerZ,
                     };
                     const next = [...prev, point];
                     return next.length > MAX_CHART_POINTS ? next.slice(-MAX_CHART_POINTS) : next;

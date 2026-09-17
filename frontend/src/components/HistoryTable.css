@@ -234,3 +234,7 @@ tbody tr:nth-child(even):hover {
         padding: 0.4rem 0.5rem;
     }
 }
+.cell-step {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}

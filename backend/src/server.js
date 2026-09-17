@@ -5,6 +5,7 @@ const connectDB = require('./config/database');
 const { initializeCache } = require('./services/telemetryService');
 const telemetryRoutes = require('./routes/telemetryRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const controlRoutes = require('./routes/controlRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -28,6 +29,7 @@ app.get('/api/health', (req, res) => {
 // Routes
 app.use('/api/telemetry', telemetryRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/control', controlRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -54,6 +56,11 @@ const startServer = async () => {
         app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
             console.log(`Health check: http://localhost:${PORT}/api/health`);
+            console.log(
+                `Pitch control target: ${process.env.ESP32_BASE_URL
+                    ? process.env.ESP32_BASE_URL
+                    : 'simulator (ESP32_BASE_URL not set)'}`
+            );
         });
     } catch (error) {
         console.error('Failed to start server:', error.message);

@@ -4,14 +4,30 @@ import {
 } from 'recharts';
 import './LiveChart.css';
 
+/**
+ * Every plottable telemetry field.
+ *
+ * `group` splits them in the dropdown. Only the turbine metrics get quick-pick
+ * pills — the six 9-DOF channels are selectable from the dropdown instead, so
+ * the pill row does not become unreadable.
+ */
 const METRICS = [
-    { key: 'windSpeed', label: 'Wind Speed', unit: 'm/s', color: '#38bdf8' },
-    { key: 'power', label: 'Power', unit: 'W', color: '#f59e0b' },
-    { key: 'voltage', label: 'Voltage', unit: 'V', color: '#4ade80' },
-    { key: 'current', label: 'Current', unit: 'A', color: '#a78bfa' },
-    { key: 'pitchAngle', label: 'Pitch Angle', unit: '°', color: '#22d3ee' },
-    { key: 'stepperPosition', label: 'Stepper', unit: 'steps', color: '#f472b6' },
+    { key: 'windSpeed', label: 'Wind Speed', unit: 'm/s', color: '#38bdf8', group: 'Turbine', pill: true },
+    { key: 'power', label: 'Power', unit: 'W', color: '#f59e0b', group: 'Turbine', pill: true },
+    { key: 'voltage', label: 'Voltage', unit: 'V', color: '#4ade80', group: 'Turbine', pill: true },
+    { key: 'current', label: 'Current', unit: 'A', color: '#a78bfa', group: 'Turbine', pill: true },
+    { key: 'pitchAngle', label: 'Pitch Angle', unit: '°', color: '#22d3ee', group: 'Turbine', pill: true },
+    { key: 'stepperPosition', label: 'Stepper', unit: 'steps', color: '#f472b6', group: 'Turbine', pill: true },
+
+    { key: 'gyroX', label: 'Gyro X', unit: '°/s', color: '#fb7185', group: 'Platform motion' },
+    { key: 'gyroY', label: 'Gyro Y', unit: '°/s', color: '#fbbf24', group: 'Platform motion' },
+    { key: 'gyroZ', label: 'Gyro Z', unit: '°/s', color: '#34d399', group: 'Platform motion' },
+    { key: 'accelerometerX', label: 'Accel X', unit: 'g', color: '#60a5fa', group: 'Platform motion' },
+    { key: 'accelerometerY', label: 'Accel Y', unit: 'g', color: '#c084fc', group: 'Platform motion' },
+    { key: 'accelerometerZ', label: 'Accel Z', unit: 'g', color: '#2dd4bf', group: 'Platform motion' },
 ];
+
+const METRIC_GROUPS = ['Turbine', 'Platform motion'];
 
 function LiveChart({ data }) {
     const [activeMetric, setActiveMetric] = useState('power');
@@ -35,18 +51,23 @@ function LiveChart({ data }) {
                         value={activeMetric}
                         onChange={(e) => setActiveMetric(e.target.value)}
                     >
-                        {METRICS.map(m => (
-                            <option key={m.key} value={m.key}>
-                                {m.label} ({m.unit})
-                            </option>
+                        {METRIC_GROUPS.map(group => (
+                            <optgroup key={group} label={group}>
+                                {METRICS.filter(m => m.group === group).map(m => (
+                                    <option key={m.key} value={m.key}>
+                                        {m.label} ({m.unit})
+                                    </option>
+                                ))}
+                            </optgroup>
                         ))}
                     </select>
                 </div>
             </div>
 
-            {/* Metric selector pills */}
+            {/* Metric selector pills — turbine metrics only; the 9-DOF
+                channels live in the dropdown above to keep this row readable */}
             <div className="metric-pills">
-                {METRICS.map(m => (
+                {METRICS.filter(m => m.pill).map(m => (
                     <button
                         key={m.key}
                         className={`metric-pill ${activeMetric === m.key ? 'active' : ''}`}
