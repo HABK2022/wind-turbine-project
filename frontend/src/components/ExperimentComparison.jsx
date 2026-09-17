@@ -104,10 +104,6 @@ function ExperimentComparison({ onExperimentChange, currentExperimentId }) {
                                     <span className="exp-detail-value">{exp.pitchAngle}°</span>
                                 </div>
                                 <div className="exp-detail">
-                                    <span className="exp-detail-label">Avg Wind</span>
-                                    <span className="exp-detail-value">{exp.avgWindSpeed} m/s</span>
-                                </div>
-                                <div className="exp-detail">
                                     <span className="exp-detail-label">Avg Power</span>
                                     <span className="exp-detail-value">{exp.avgPower} W</span>
                                 </div>

@@ -2,9 +2,13 @@
  * Validation middleware for incoming telemetry data.
  * Checks required fields, types, and sane numeric ranges.
  *
- * Required : experimentId, windSpeed, pitchAngle, voltage, current
+ * Required : experimentId, pitchAngle, current
  * Optional : source, stepperPosition, timeStep,
  *            gyroX/Y/Z, accelerometerX/Y/Z
+ *
+ * Voltage and power are NOT accepted from the client: both are derived from
+ * current by the server (see config/calibration.js). There is no wind sensor
+ * on this rig, so windSpeed is not part of the telemetry contract.
  *
  * The optional fields are validated only when present, so a client that does
  * not yet send them (an older simulator, or early ESP32 firmware) is still
@@ -29,7 +33,7 @@ const checkOptionalNumber = (errors, value, name, min, max, unit) => {
 
 const validateTelemetry = (req, res, next) => {
     const errors = [];
-    const { experimentId, windSpeed, pitchAngle, voltage, current, source } = req.body;
+    const { experimentId, pitchAngle, current, source } = req.body;
 
     // Required string fields
     if (!experimentId || typeof experimentId !== 'string' || experimentId.trim() === '') {
@@ -45,28 +49,12 @@ const validateTelemetry = (req, res, next) => {
     }
 
     // Required numeric fields
-    if (windSpeed === undefined || windSpeed === null) {
-        errors.push('windSpeed is required');
-    } else if (typeof windSpeed !== 'number' || isNaN(windSpeed)) {
-        errors.push('windSpeed must be a valid number');
-    } else if (windSpeed < 0 || windSpeed > 100) {
-        errors.push('windSpeed must be between 0 and 100 m/s');
-    }
-
     if (pitchAngle === undefined || pitchAngle === null) {
         errors.push('pitchAngle is required');
     } else if (typeof pitchAngle !== 'number' || isNaN(pitchAngle)) {
         errors.push('pitchAngle must be a valid number');
     } else if (pitchAngle < -90 || pitchAngle > 90) {
         errors.push('pitchAngle must be between -90 and 90 degrees');
-    }
-
-    if (voltage === undefined || voltage === null) {
-        errors.push('voltage is required');
-    } else if (typeof voltage !== 'number' || isNaN(voltage)) {
-        errors.push('voltage must be a valid number');
-    } else if (voltage < 0 || voltage > 500) {
-        errors.push('voltage must be between 0 and 500 V');
     }
 
     if (current === undefined || current === null) {

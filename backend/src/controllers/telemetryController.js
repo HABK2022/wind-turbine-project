@@ -7,7 +7,7 @@ const telemetryService = require('../services/telemetryService');
 const createTelemetry = async (req, res) => {
     try {
         const saved = await telemetryService.saveTelemetry(req.body);
-        console.log(`Telemetry saved: ${saved.experimentId} | wind=${saved.windSpeed} m/s | power=${saved.power.toFixed(2)} W`);
+        console.log(`Telemetry saved: ${saved.experimentId} | I=${saved.current.toFixed(3)} A | V=${saved.voltage.toFixed(2)} V | P=${saved.power.toFixed(2)} W`);
 
         res.status(201).json({
             success: true,
@@ -21,7 +21,6 @@ const createTelemetry = async (req, res) => {
         });
     }
 };
-
 
 /**
  * GET /api/telemetry/latest

@@ -1,4 +1,5 @@
 const Telemetry = require('../models/Telemetry');
+const { voltageFromCurrent, powerFromCurrent } = require('../config/calibration');
 
 /**
  * In-memory cache for the latest telemetry record.
@@ -9,30 +10,30 @@ let currentLatest = null;
 
 /**
  * Save a validated telemetry record.
- * Calculates power from voltage × current (server-side).
  * Updates the in-memory latest cache after saving.
  *
- * POWER CALCULATION — deliberately unchanged.
+ * ELECTRICAL VALUES — both derived here, on the server.
  *
- *   power = voltage × current
+ *   V = I × 41 + 1.5
+ *   P = I² × 41 + 1.5·I
  *
- * This remains the single server-side source of truth, exactly as before, and
- * the data source is still not allowed to supply `power` itself.
+ * Current is the one electrical quantity the data source measures and reports.
+ * Voltage and power are both derived from it using the confirmed calibration in
+ * config/calibration.js, which holds the two constants.
  *
- * The calibration relationship V = I × 41 + 2 (and the P = I² × 41 + 2I that
- * follows from it, since I × (41I + 2) = 41I² + 2I) describes how voltage and
- * current relate *on the physical rig*. It is therefore a property of the
- * measurement source, not of this server: whoever produces the reading decides
- * how voltage is obtained, and this server multiplies whatever voltage and
- * current it is given. The simulator applies that relationship when generating
- * values (see scripts/liveSimulator.js) so its packets are self-consistent.
+ * Deriving voltage here as well as power keeps the confirmed relationships true
+ * whatever the source is: the simulator today, the ESP32-S3 later. The firmware
+ * reports its own INA219 bus voltage and its own power figure, and neither
+ * follows this calibration — by deriving both from the reported current, the
+ * stored record follows the requirement regardless.
  *
- * Whether the real ESP32 should report the INA219's independently measured bus
- * voltage, or a voltage derived from current via that calibration, is still an
- * open hardware decision and is intentionally NOT settled here.
+ * Power is NOT computed as voltage × current. That earlier assumption has been
+ * withdrawn and no V × I relationship is used or checked anywhere.
  */
 const saveTelemetry = async (data) => {
-    const power = data.voltage * data.current;
+    const current = data.current;
+    const voltage = voltageFromCurrent(current);
+    const power = powerFromCurrent(current);
 
     const telemetry = new Telemetry({
         experimentId: data.experimentId,
@@ -41,11 +42,10 @@ const saveTelemetry = async (data) => {
         // ?? rather than ||: stepperPosition 0 and timeStep 0 are real values,
         // not "missing". Only undefined/null fall through to null.
         timeStep: data.timeStep ?? null,
-        windSpeed: data.windSpeed,
         pitchAngle: data.pitchAngle,
         stepperPosition: data.stepperPosition ?? null,
-        voltage: data.voltage,
-        current: data.current,
+        voltage,
+        current,
         power,
         // Platform motion, 9-DOF. Absent from older/simpler sources → null.
         gyroX: data.gyroX ?? null,
@@ -108,7 +108,6 @@ const initializeCache = async () => {
  *   - experimentId
  *   - pitchAngle
  *   - source
- *   - minWindSpeed / maxWindSpeed
  *   - limit / page
  */
 const getHistory = async (filters = {}) => {
@@ -134,13 +133,6 @@ const getHistory = async (filters = {}) => {
     // Source
     if (filters.source) {
         query.source = filters.source;
-    }
-
-    // Wind speed range
-    if (filters.minWindSpeed || filters.maxWindSpeed) {
-        query.windSpeed = {};
-        if (filters.minWindSpeed) query.windSpeed.$gte = Number(filters.minWindSpeed);
-        if (filters.maxWindSpeed) query.windSpeed.$lte = Number(filters.maxWindSpeed);
     }
 
     // Pagination

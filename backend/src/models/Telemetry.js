@@ -6,8 +6,9 @@ const mongoose = require('mongoose');
  * Field groups:
  *   - Identity / provenance : experimentId, source
  *   - Time                  : timestamp (wall clock), timeStep (sample index)
- *   - Turbine measurements  : windSpeed, pitchAngle, stepperPosition
- *   - Electrical            : voltage, current, power (power is derived server-side)
+ *   - Turbine measurements  : pitchAngle, stepperPosition
+ *   - Electrical            : voltage, current, power (voltage and power are
+ *                             both derived server-side from current)
  *   - Platform motion 9-DOF : gyroX/Y/Z, accelerometerX/Y/Z
  *
  * Backward compatibility:
@@ -53,10 +54,6 @@ const telemetrySchema = new mongoose.Schema(
             min: [0, 'timeStep cannot be negative'],
         },
 
-        windSpeed: {
-            type: Number,
-            required: [true, 'Wind speed is required'],
-        },
         pitchAngle: {
             type: Number,
             required: [true, 'Pitch angle is required'],

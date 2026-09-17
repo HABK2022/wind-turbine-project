@@ -19,10 +19,6 @@ const getSummary = async (filters = {}) => {
                 _id: null,
                 count: { $sum: 1 },
 
-                avgWindSpeed: { $avg: '$windSpeed' },
-                minWindSpeed: { $min: '$windSpeed' },
-                maxWindSpeed: { $max: '$windSpeed' },
-
                 avgPower: { $avg: '$power' },
                 minPower: { $min: '$power' },
                 maxPower: { $max: '$power' },
@@ -43,11 +39,6 @@ const getSummary = async (filters = {}) => {
             $project: {
                 _id: 0,
                 count: 1,
-                windSpeed: {
-                    avg: { $round: ['$avgWindSpeed', 2] },
-                    min: { $round: ['$minWindSpeed', 2] },
-                    max: { $round: ['$maxWindSpeed', 2] },
-                },
                 power: {
                     avg: { $round: ['$avgPower', 2] },
                     min: { $round: ['$minPower', 2] },
@@ -79,7 +70,6 @@ const getSummary = async (filters = {}) => {
  * Get power analytics data for charting.
  *
  * Returns:
- *   - powerByWindSpeed:  windSpeed → avgPower (grouped by rounded wind speed)
  *   - powerByPitchAngle: pitchAngle → avgPower (grouped by pitch angle)
  *   - experiments:       per-experiment summary
  */
@@ -87,35 +77,6 @@ const getPowerAnalytics = async (filters = {}) => {
     const matchStage = {};
     if (filters.experimentId) matchStage.experimentId = filters.experimentId;
     if (filters.source) matchStage.source = filters.source;
-
-    // Power vs Wind Speed — group by rounded wind speed
-    const powerByWindSpeed = await Telemetry.aggregate([
-        { $match: matchStage },
-        {
-            $group: {
-                _id: { $round: ['$windSpeed', 0] },
-                avgPower: { $avg: '$power' },
-                minPower: { $min: '$power' },
-                maxPower: { $max: '$power' },
-                avgVoltage: { $avg: '$voltage' },
-                avgCurrent: { $avg: '$current' },
-                count: { $sum: 1 },
-            },
-        },
-        {
-            $project: {
-                _id: 0,
-                windSpeed: '$_id',
-                avgPower: { $round: ['$avgPower', 2] },
-                minPower: { $round: ['$minPower', 2] },
-                maxPower: { $round: ['$maxPower', 2] },
-                avgVoltage: { $round: ['$avgVoltage', 2] },
-                avgCurrent: { $round: ['$avgCurrent', 2] },
-                count: 1,
-            },
-        },
-        { $sort: { windSpeed: 1 } },
-    ]);
 
     // Power vs Pitch Angle — group by pitch angle
     const powerByPitchAngle = await Telemetry.aggregate([
@@ -126,7 +87,6 @@ const getPowerAnalytics = async (filters = {}) => {
                 avgPower: { $avg: '$power' },
                 minPower: { $min: '$power' },
                 maxPower: { $max: '$power' },
-                avgWindSpeed: { $avg: '$windSpeed' },
                 count: { $sum: 1 },
             },
         },
@@ -137,7 +97,6 @@ const getPowerAnalytics = async (filters = {}) => {
                 avgPower: { $round: ['$avgPower', 2] },
                 minPower: { $round: ['$minPower', 2] },
                 maxPower: { $round: ['$maxPower', 2] },
-                avgWindSpeed: { $round: ['$avgWindSpeed', 2] },
                 count: 1,
             },
         },
@@ -153,7 +112,6 @@ const getPowerAnalytics = async (filters = {}) => {
                 pitchAngle: { $first: '$pitchAngle' },
                 source: { $first: '$source' },
                 avgPower: { $avg: '$power' },
-                avgWindSpeed: { $avg: '$windSpeed' },
                 count: { $sum: 1 },
                 firstRecord: { $min: '$timestamp' },
                 lastRecord: { $max: '$timestamp' },
@@ -166,7 +124,6 @@ const getPowerAnalytics = async (filters = {}) => {
                 pitchAngle: 1,
                 source: 1,
                 avgPower: { $round: ['$avgPower', 2] },
-                avgWindSpeed: { $round: ['$avgWindSpeed', 2] },
                 count: 1,
                 firstRecord: 1,
                 lastRecord: 1,
@@ -176,7 +133,6 @@ const getPowerAnalytics = async (filters = {}) => {
     ]);
 
     return {
-        powerByWindSpeed,
         powerByPitchAngle,
         experiments,
     };

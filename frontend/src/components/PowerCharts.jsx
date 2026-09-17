@@ -41,37 +41,6 @@ function PowerCharts({ experimentId }) {
 
     return (
         <div className="power-charts" id="power-charts">
-            {/* Power vs Wind Speed */}
-            <div className="card">
-                <h3 className="card-title">Power vs Wind Speed</h3>
-                <p className="chart-desc">Average power output grouped by wind speed</p>
-                <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={data.powerByWindSpeed}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                        <XAxis
-                            dataKey="windSpeed"
-                            tick={{ fontSize: 10, fill: '#64748b' }}
-                            label={{ value: 'Wind Speed (m/s)', position: 'insideBottom', offset: -5, fill: '#64748b', fontSize: 11 }}
-                            axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
-                        />
-                        <YAxis
-                            tick={{ fontSize: 10, fill: '#64748b' }}
-                            label={{ value: 'Power (W)', angle: -90, position: 'insideLeft', fill: '#64748b', fontSize: 11 }}
-                            axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
-                        />
-                        <Tooltip
-                            contentStyle={tooltipStyle}
-                            formatter={(val, name) => {
-                                const labels = { avgPower: 'Avg Power', minPower: 'Min', maxPower: 'Max' };
-                                return [`${val} W`, labels[name] || name];
-                            }}
-                            labelFormatter={(v) => `Wind: ${v} m/s`}
-                        />
-                        <Bar dataKey="avgPower" fill="#3b82f6" radius={[4, 4, 0, 0]} name="avgPower" />
-                    </BarChart>
-                </ResponsiveContainer>
-            </div>
-
             {/* Power vs Pitch Angle */}
             <div className="card">
                 <h3 className="card-title">Power vs Pitch Angle</h3>
@@ -94,7 +63,6 @@ function PowerCharts({ experimentId }) {
                             contentStyle={tooltipStyle}
                             formatter={(val, name) => {
                                 if (name === 'avgPower') return [`${val} W`, 'Avg Power'];
-                                if (name === 'avgWindSpeed') return [`${val} m/s`, 'Avg Wind'];
                                 return [val, name];
                             }}
                             labelFormatter={(v) => `Pitch: ${v}°`}
@@ -107,8 +75,9 @@ function PowerCharts({ experimentId }) {
                     </BarChart>
                 </ResponsiveContainer>
                 <p className="chart-note">
-                    ⚠️ Different pitch angles were tested under different wind conditions.
-                    Direct power comparison may not reflect pitch effectiveness alone.
+                    Grouped by the pitch angle each record was taken at. Power is derived
+                    from current (P = I² × 41 + 1.5·I), so this compares electrical output
+                    across pitch settings.
                 </p>
             </div>
         </div>

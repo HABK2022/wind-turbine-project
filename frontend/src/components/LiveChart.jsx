@@ -12,7 +12,6 @@ import './LiveChart.css';
  * the pill row does not become unreadable.
  */
 const METRICS = [
-    { key: 'windSpeed', label: 'Wind Speed', unit: 'm/s', color: '#38bdf8', group: 'Turbine', pill: true },
     { key: 'power', label: 'Power', unit: 'W', color: '#f59e0b', group: 'Turbine', pill: true },
     { key: 'voltage', label: 'Voltage', unit: 'V', color: '#4ade80', group: 'Turbine', pill: true },
     { key: 'current', label: 'Current', unit: 'A', color: '#a78bfa', group: 'Turbine', pill: true },

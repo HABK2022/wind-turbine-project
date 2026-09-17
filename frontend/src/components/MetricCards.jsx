@@ -3,19 +3,6 @@ import './MetricCards.css';
 
 const metrics = [
     {
-        key: 'windSpeed', label: 'Wind Speed', unit: 'm/s', decimals: 2,
-        subtitle: 'Live wind measurement', color: 'var(--color-wind)',
-        icon: (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17.7 7.7a7.5 7.5 0 1 1-10.6 10.6"/>
-                <path d="M9.4 4.6A7.5 7.5 0 0 1 20 10.5"/>
-                <path d="M2 12h10"/>
-                <path d="M2 16h7"/>
-                <path d="M2 8h5"/>
-            </svg>
-        ),
-    },
-    {
         key: 'pitchAngle', label: 'Pitch Angle', unit: '°', decimals: 1,
         subtitle: 'Blade pitch position', color: 'var(--color-pitch)',
         icon: (

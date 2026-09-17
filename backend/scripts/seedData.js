@@ -11,12 +11,17 @@
  * constants below in step with it so seeded history and live telemetry sit on
  * the same scale.
  *
+ * There is no wind sensor on this rig, so wind speed is not generated or
+ * stored. Voltage and power come from src/config/calibration.js, the single
+ * place holding the confirmed constants.
+ *
  * Usage: node scripts/seedData.js
  */
 
 require('dotenv').config();
 const mongoose = require('mongoose');
 const Telemetry = require('../src/models/Telemetry');
+const { voltageFromCurrent, powerFromCurrent } = require('../src/config/calibration');
 
 const MONGO_URI = process.env.MONGO_URI;
 
@@ -26,17 +31,9 @@ if (!MONGO_URI) {
 }
 
 /* ── SIMULATOR-ONLY rig model (see liveSimulator.js) ────────────────────
-   V = I × 41 + 2 is the project's calibration relationship, applied here so
-   seeded voltage/current/power are self-consistent. NOT confirmed for the real
-   hardware — see liveSimulator.js for the full note.                      */
-const CAL_SLOPE = 41;
-const CAL_INTERCEPT = 2;
-
-const WIND_CUT_IN = 1.5;
-const WIND_RATED = 4.0;
-const WIND_CUT_OUT = 9.0;
-const CURRENT_RATED = 0.29;
-const CURRENT_MAX = 0.42;
+   Current is generated directly — there is no wind sensor. Voltage and power
+   are taken from the shared calibration module so the seeded history follows
+   the same confirmed formulas the live path uses.                         */
 const PITCH_OPTIMUM = 4;
 const PITCH_FALLOFF = 26;
 
@@ -53,23 +50,23 @@ const experiments = [
     {
         experimentId: 'EXP-001',
         pitchAngle: 0,
-        windSpeedRange: [2, 4],     // m/s
+        currentRange: [0.02, 0.16],  // A
         recordCount: 100,
-        description: 'Pitch 0° — Low wind speed range',
+        description: 'Pitch 0° — low output band',
     },
     {
         experimentId: 'EXP-002',
         pitchAngle: 4,
-        windSpeedRange: [3, 6],
+        currentRange: [0.10, 0.30],
         recordCount: 100,
-        description: 'Pitch 4° — Medium wind speed range',
+        description: 'Pitch 4° — highest output band',
     },
     {
         experimentId: 'EXP-003',
         pitchAngle: 20,
-        windSpeedRange: [5, 8],
+        currentRange: [0.12, 0.26],
         recordCount: 100,
-        description: 'Pitch 20° — High wind speed range',
+        description: 'Pitch 20° — feathered, reduced output',
     },
 ];
 
@@ -91,22 +88,10 @@ function noise(sigma) {
     return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v) * sigma;
 }
 
-/** Wind speed and blade pitch → generated current (simulator-only model). */
-function currentFor(windSpeed, pitchAngle) {
-    if (windSpeed <= WIND_CUT_IN) return 0;
-
-    let base;
-    if (windSpeed <= WIND_RATED) {
-        const span = (windSpeed - WIND_CUT_IN) / (WIND_RATED - WIND_CUT_IN);
-        base = CURRENT_RATED * Math.pow(span, 1.5);
-    } else {
-        const span = clamp((windSpeed - WIND_RATED) / (WIND_CUT_OUT - WIND_RATED), 0, 1);
-        base = CURRENT_RATED + (CURRENT_MAX - CURRENT_RATED) * span;
-    }
-
+/** Blade pitch → conversion efficiency (simulator-only model). */
+function pitchEfficiency(pitchAngle) {
     const offset = (pitchAngle - PITCH_OPTIMUM) / PITCH_FALLOFF;
-    const pitchEfficiency = clamp(1 - offset * offset, 0.15, 1);
-    return base * pitchEfficiency;
+    return clamp(1 - offset * offset, 0.15, 1);
 }
 
 /**
@@ -118,14 +103,15 @@ function currentFor(windSpeed, pitchAngle) {
  */
 function generateExperiment(experiment, stepOffset) {
     const records = [];
-    const { experimentId, pitchAngle, windSpeedRange, recordCount } = experiment;
+    const { experimentId, pitchAngle, currentRange, recordCount } = experiment;
 
     // Start timestamp: progressing forward in SAMPLE_SECONDS intervals
     const startTime = new Date(Date.now() - recordCount * SAMPLE_SECONDS * 1000);
 
-    let windSpeed = (windSpeedRange[0] + windSpeedRange[1]) / 2;
-    let current = currentFor(windSpeed, pitchAngle);
+    let baseCurrent = (currentRange[0] + currentRange[1]) / 2;
+    let current = baseCurrent * pitchEfficiency(pitchAngle);
     let yawRate = 0;
+    let seaState = 0.4;   // drifts on its own; waves are not measured
 
     // Stepper position for a fixed-pitch experiment (0° → 0, 4° → 200, 20° → 1000)
     const stepperBase = Math.round(pitchAngle * STEPS_PER_DEGREE);
@@ -133,26 +119,22 @@ function generateExperiment(experiment, stepOffset) {
     for (let i = 0; i < recordCount; i++) {
         const elapsed = i * SAMPLE_SECONDS; // seconds into the experiment
 
-        // Wind drifts gradually within the experiment's range
-        windSpeed = gradualValue(windSpeed, windSpeedRange[0], windSpeedRange[1], 0.3);
-
-        // Current follows wind through the same curve the live simulator uses
-        const target = currentFor(windSpeed, pitchAngle);
+        // Current drifts gradually within the experiment's band, scaled by pitch
+        baseCurrent = gradualValue(baseCurrent, currentRange[0], currentRange[1], 0.012);
+        const target = baseCurrent * pitchEfficiency(pitchAngle);
         current += (target - current) * 0.5;
         const currentNow = Math.max(0, current + noise(0.002));
 
-        // Voltage from the calibration, power from V × I (matching the backend)
-        const voltage = currentNow > 0 ? CAL_SLOPE * currentNow + CAL_INTERCEPT : 0;
-        const power = voltage * currentNow;
+        // Voltage and power from the shared calibration — the same functions the
+        // live save path uses, so seeded and live records follow one definition.
+        const voltage = voltageFromCurrent(currentNow);
+        const power = powerFromCurrent(currentNow);
 
         // Stepper holds position, with a little mechanical play
         const stepperPosition = stepperBase + Math.round(noise(1.2));
 
         // Platform motion — same wave model as the live simulator
-        const seaState = clamp(
-            (windSpeed - windSpeedRange[0]) / Math.max(0.1, windSpeedRange[1] - windSpeedRange[0]),
-            0, 1
-        );
+        seaState = gradualValue(seaState, 0, 1, 0.05);
         const rollAmp = 0.6 + 1.8 * seaState;
         const platPitchAmp = 0.4 + 1.3 * seaState;
         const heaveAmp = 0.02 + 0.05 * seaState;
@@ -184,7 +166,6 @@ function generateExperiment(experiment, stepOffset) {
             source: 'simulator',
             timestamp,
             timeStep: stepOffset + i,
-            windSpeed: round(windSpeed, 3),
             pitchAngle,
             stepperPosition,
             voltage: round(voltage, 3),
@@ -229,7 +210,7 @@ async function seed() {
         console.log(`========================================`);
         console.log(`\nExperiments:`);
         for (const exp of experiments) {
-            console.log(`  ${exp.experimentId}: pitch=${exp.pitchAngle}°, wind=${exp.windSpeedRange[0]}-${exp.windSpeedRange[1]} m/s`);
+            console.log(`  ${exp.experimentId}: pitch=${exp.pitchAngle}°, I=${exp.currentRange[0]}-${exp.currentRange[1]} A`);
         }
 
         await mongoose.connection.close();

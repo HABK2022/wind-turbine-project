@@ -11,14 +11,14 @@ import './TurbineVisualization.css';
  * This avoids CSS animation restarts and React re-renders for animation.
  *
  * VISUAL MAPPINGS (all from real telemetry):
- *   windSpeed       → blade rotation speed + wind particle intensity
+ *   power           → blade rotation speed + generator glow intensity
  *   pitchAngle      → blade chord width (smooth interpolation)
- *   power           → generator glow intensity
  *   stepperPosition → stepper bar + pitch linkage
  *
  * IMPORTANT:
- * - Blade rotation is a VISUAL REPRESENTATION driven by windSpeed.
- *   It does NOT represent measured RPM. RPM is NOT in the telemetry schema.
+ * - There is no wind sensor on this rig, so nothing here depicts wind. Blade
+ *   rotation is a VISUAL REPRESENTATION driven by generated power; it does NOT
+ *   represent measured RPM, which is not in the telemetry schema either.
  * - Power glow normalization is purely a UI visual scale.
  * - No fake data. No Math.random() for telemetry. No invented sensor values.
  */
@@ -27,29 +27,6 @@ import './TurbineVisualization.css';
 const HUB_X = 400;
 const HUB_Y = 195;
 const BLADE_LEN = 148;
-
-// Wind streak layout — fixed positions, never recreated
-const WIND_STREAKS = [
-    // Far (slow, subtle)
-    { y: 10, w: 130, delay: 0.0, layer: 'far' },
-    { y: 24, w: 110, delay: 0.8, layer: 'far' },
-    { y: 38, w: 120, delay: 1.5, layer: 'far' },
-    { y: 53, w: 100, delay: 0.3, layer: 'far' },
-    { y: 68, w: 115, delay: 1.1, layer: 'far' },
-    { y: 82, w: 95, delay: 0.6, layer: 'far' },
-    // Mid
-    { y: 16, w: 80, delay: 0.2, layer: 'mid' },
-    { y: 30, w: 70, delay: 0.9, layer: 'mid' },
-    { y: 42, w: 85, delay: 0.5, layer: 'mid' },
-    { y: 57, w: 65, delay: 1.3, layer: 'mid' },
-    { y: 72, w: 75, delay: 0.4, layer: 'mid' },
-    // Near (fast, more visible)
-    { y: 20, w: 55, delay: 0.15, layer: 'near' },
-    { y: 34, w: 48, delay: 0.85, layer: 'near' },
-    { y: 47, w: 58, delay: 1.2, layer: 'near' },
-    { y: 62, w: 42, delay: 0.65, layer: 'near' },
-    { y: 78, w: 52, delay: 1.4, layer: 'near' },
-];
 
 /**
  * Compute blade SVG path from interpolated pitch angle.
@@ -74,7 +51,6 @@ function computeBladePath(pitch) {
 }
 
 function TurbineVisualization({ data }) {
-    const windSpeed      = data?.windSpeed ?? 0;
     const pitchAngle     = data?.pitchAngle ?? 0;
     const power          = data?.power ?? 0;
     const stepperPosition = data?.stepperPosition ?? 0;
@@ -96,7 +72,7 @@ function TurbineVisualization({ data }) {
     const anim = useRef({
         angle: 0,           // current rotation angle (degrees)
         speed: 0,           // current rotation speed (degrees/sec)
-        targetSpeed: 0,     // target from windSpeed
+        targetSpeed: 0,     // target from power
         pitch: 0,           // current interpolated pitch
         targetPitch: 0,     // target from pitchAngle
         lastPatchedPitch: -1,
@@ -104,10 +80,11 @@ function TurbineVisualization({ data }) {
 
     // Update targets when telemetry arrives (every ~200ms)
     useEffect(() => {
-        // Visual rotation speed from windSpeed — NOT RPM
-        anim.current.targetSpeed = windSpeed <= 0.1 ? 0 : Math.min(240, windSpeed * 30);
+        // Visual rotation speed from generated power — NOT RPM, and not wind.
+        // A rotor producing power is turning; one producing none is not.
+        anim.current.targetSpeed = power <= 0.01 ? 0 : Math.min(240, power * 55);
         anim.current.targetPitch = pitchAngle;
-    }, [windSpeed, pitchAngle]);
+    }, [power, pitchAngle]);
 
     // ─── 60fps Animation Loop ─────────────────────────────────────────
     useEffect(() => {
@@ -152,21 +129,6 @@ function TurbineVisualization({ data }) {
     }, []);
 
     // ─── Derived visual values ────────────────────────────────────────
-    const windDuration = useMemo(() => {
-        if (windSpeed <= 0.1) return 0;
-        return Math.max(0.8, 7 / windSpeed);
-    }, [windSpeed]);
-
-    const windIntensity = useMemo(() => Math.min(1, windSpeed / 8), [windSpeed]);
-
-    const windLabel = useMemo(() => {
-        if (windSpeed < 1) return 'Calm';
-        if (windSpeed < 3) return 'Light';
-        if (windSpeed < 5) return 'Moderate';
-        if (windSpeed < 7) return 'Fresh';
-        return 'Strong';
-    }, [windSpeed]);
-
     // Power glow — visual scale only, NOT engineering threshold
     const powerGlow = useMemo(() => Math.min(1, Math.max(0.04, power / 35)), [power]);
 
@@ -174,21 +136,6 @@ function TurbineVisualization({ data }) {
         () => Math.min(100, Math.max(0, (stepperPosition / 1000) * 100)),
         [stepperPosition],
     );
-
-    // Wind elements — created once, speed controlled by CSS custom props
-    const windElements = useMemo(() =>
-        WIND_STREAKS.map((s, i) => (
-            <div
-                key={i}
-                className={`tv-wind tv-wind-${s.layer}`}
-                style={{
-                    top: `${s.y}%`,
-                    width: `${s.width}px`,
-                    animationDelay: `${s.delay}s`,
-                }}
-            />
-        )),
-    []);
 
     const initialPath = useMemo(() => computeBladePath(pitchAngle || 0), []);
 
@@ -206,15 +153,6 @@ function TurbineVisualization({ data }) {
             });
         } catch { return '—'; }
     }, [timestamp]);
-
-    // Wind condition label — UI classification based on windSpeed
-    const windCondition = useMemo(() => {
-        if (windSpeed < 1) return { label: 'Calm', color: 'rgba(148,163,184,0.6)' };
-        if (windSpeed < 3) return { label: 'Light', color: '#38bdf8' };
-        if (windSpeed < 5) return { label: 'Moderate', color: '#38bdf8' };
-        if (windSpeed < 7) return { label: 'Fresh', color: '#22d3ee' };
-        return { label: 'Strong', color: '#06b6d4' };
-    }, [windSpeed]);
 
     // Power status — determined from real power value only
     const powerStatus = useMemo(() => {
@@ -234,16 +172,8 @@ function TurbineVisualization({ data }) {
 
                 {/* LEFT — Turbine Scene (~62%) */}
                 <div className="tv-scene" style={{
-                    '--tv-wd-far': windDuration > 0 ? `${windDuration * 2.2}s` : '12s',
-                    '--tv-wd-mid': windDuration > 0 ? `${windDuration * 1.4}s` : '8s',
-                    '--tv-wd-near': windDuration > 0 ? `${windDuration}s` : '5s',
-                    '--tv-w-opacity': windIntensity,
-                    '--tv-w-state': windDuration > 0 ? 'running' : 'paused',
                     '--tv-power-glow': powerGlow,
                 }}>
-                    {/* ═══ Wind Particle System ═══ */}
-                    <div className="tv-wind-layer">{windElements}</div>
-
                     {/* ═══ Main Turbine SVG ═══ */}
                     <svg className="tv-svg" viewBox="0 0 800 520" xmlns="http://www.w3.org/2000/svg">
                         <defs>
@@ -372,26 +302,6 @@ function TurbineVisualization({ data }) {
 
                     {/* ═══ Scene HUD Overlays (positioned over turbine) ═══ */}
 
-                    {/* Wind Speed — top left */}
-                    <div className="tv-hud tv-hud-wind">
-                        <div className="tv-hud-label">
-                            <svg className="tv-hud-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 12h10M2 16h7M2 8h5"/><path d="M17.7 7.7a7.5 7.5 0 1 1-10.6 10.6"/></svg>
-                            Wind Speed
-                        </div>
-                        <div className="tv-hud-val tv-c-wind">
-                            {windSpeed > 0 ? windSpeed.toFixed(1) : '—'}
-                            <span className="tv-hud-unit">m/s</span>
-                        </div>
-                        <div className="tv-windbar-track">
-                            <div className="tv-windbar-fill" style={{ width: `${Math.min(100, (windSpeed / 10) * 100)}%` }} />
-                        </div>
-                        <div className="tv-windbar-labels">
-                            <span className={windSpeed < 3 ? 'act' : ''}>Calm</span>
-                            <span className={windSpeed >= 3 && windSpeed < 6 ? 'act' : ''}>Moderate</span>
-                            <span className={windSpeed >= 6 ? 'act' : ''}>Strong</span>
-                        </div>
-                    </div>
-
                     {/* Pitch Angle — top right */}
                     <div className="tv-hud tv-hud-pitch">
                         <div className="tv-hud-label">
@@ -460,10 +370,6 @@ function TurbineVisualization({ data }) {
                             </div>
                             <div className="tv-panel-divider" />
                             <div className="tv-panel-row">
-                                <span className="tv-panel-key">Wind Speed</span>
-                                <span className="tv-panel-val tv-c-wind">{windSpeed > 0 ? `${windSpeed.toFixed(2)} m/s` : '—'}</span>
-                            </div>
-                            <div className="tv-panel-row">
                                 <span className="tv-panel-key">Pitch Angle</span>
                                 <span className="tv-panel-val tv-c-pitch">{pitchAngle}°</span>
                             </div>
@@ -506,15 +412,6 @@ function TurbineVisualization({ data }) {
                         </div>
 
                         <div className="tv-status-grid">
-                            {/* Wind Conditions */}
-                            <div className="tv-status-item">
-                                <div className="tv-status-label">Wind Conditions</div>
-                                <div className="tv-status-value">
-                                    <span className="tv-c-wind">{windSpeed > 0 ? windSpeed.toFixed(1) : '—'} m/s</span>
-                                    <span className="tv-status-tag" style={{ color: windCondition.color }}>{windCondition.label}</span>
-                                </div>
-                            </div>
-
                             {/* Blade Pitch */}
                             <div className="tv-status-item">
                                 <div className="tv-status-label">Blade Pitch</div>

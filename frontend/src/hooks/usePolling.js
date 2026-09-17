@@ -64,7 +64,6 @@ export function usePolling() {
                     const point = {
                         time: new Date(res.data.timestamp).toLocaleTimeString(),
                         timeStep: res.data.timeStep,
-                        windSpeed: res.data.windSpeed,
                         power: res.data.power,
                         voltage: res.data.voltage,
                         current: res.data.current,

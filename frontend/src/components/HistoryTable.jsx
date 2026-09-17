@@ -116,7 +116,6 @@ function HistoryTable({ experimentId }) {
                             <th>#</th>
                             <th>Timestamp</th>
                             <th>Step</th>
-                            <th>Wind (m/s)</th>
                             <th>Pitch (°)</th>
                             <th>Voltage (V)</th>
                             <th>Current (A)</th>
@@ -127,9 +126,9 @@ function HistoryTable({ experimentId }) {
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan="10" className="table-loading">Loading...</td></tr>
+                            <tr><td colSpan="9" className="table-loading">Loading...</td></tr>
                         ) : filtered.length === 0 ? (
-                            <tr><td colSpan="10" className="table-loading">No records found</td></tr>
+                            <tr><td colSpan="9" className="table-loading">No records found</td></tr>
                         ) : (
                             filtered.map((row, idx) => (
                                 <tr key={row._id}>
@@ -140,7 +139,6 @@ function HistoryTable({ experimentId }) {
                                     <td className="cell-step">
                                         {row.timeStep ?? '—'}
                                     </td>
-                                    <td>{Number(row.windSpeed).toFixed(2)}</td>
                                     <td>{Number(row.pitchAngle).toFixed(1)}</td>
                                     <td>{Number(row.voltage).toFixed(2)}</td>
                                     <td>{Number(row.current).toFixed(3)}</td>

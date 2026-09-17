@@ -86,7 +86,7 @@ function App() {
             <span className="section-label-text">Power Analysis</span>
           </div>
           <p className="section-description">
-            Relationship between wind conditions and power output
+            Electrical output grouped by blade pitch angle
           </p>
           <PowerCharts experimentId={experimentId} />
         </section>

@@ -4,7 +4,6 @@ import './SummaryPanel.css';
 
 const STAT_GROUPS = [
     { key: 'power', label: 'Power', unit: 'W', color: 'var(--color-power)' },
-    { key: 'windSpeed', label: 'Wind Speed', unit: 'm/s', color: 'var(--color-wind)' },
     { key: 'voltage', label: 'Voltage', unit: 'V', color: 'var(--color-voltage)' },
     { key: 'current', label: 'Current', unit: 'A', color: 'var(--color-current)' },
 ];

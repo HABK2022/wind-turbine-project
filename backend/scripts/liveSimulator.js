@@ -13,20 +13,19 @@
  * can be exercised end to end before the hardware arrives. Records it produces
  * are tagged source: "simulator" and must never be presented as measurements.
  *
- * The backend calculates power = voltage × current.
- * The simulator does NOT calculate or send power.
+ * There is no wind sensor on this rig, so wind speed is not simulated, sent or
+ * stored. Current is the electrical quantity the source reports; the backend
+ * derives voltage and power from it using the confirmed calibration.
+ * The simulator does NOT calculate or send voltage or power.
  *
  * ── HOW THE VALUES ARE GENERATED ─────────────────────────────────────────
  * This is a connected model, not independent random numbers per field:
  *
- *   wind speed   smooth drift within the experiment's range, plus a slow gust
- *                envelope, so it changes continuously rather than jumping
- *   current      driven by wind speed through a cut-in / rated curve, scaled
- *                by how far blade pitch sits from its most efficient angle
- *   voltage      derived from current by the rig calibration (see below)
- *   power        not sent — the backend derives it, and because voltage comes
- *                from that calibration the stored power automatically follows
- *                P = I × V = 41I² + 2I
+ *   current      smooth drift within the experiment's band, scaled by how far
+ *                blade pitch sits from its most efficient angle, so a pitch
+ *                command visibly changes the electrical output
+ *   voltage      not sent — the backend derives it as V = I × 41 + 1.5
+ *   power        not sent — the backend derives it as P = I² × 41 + 1.5·I
  *   pitch angle  ramps gradually toward its current set point at a finite
  *                rate, the way a stepper actually moves. The set point is
  *                normally the experiment's, but a pitch command sent from the
@@ -35,7 +34,8 @@
  *   gyro/accel   a wave-driven floating-platform motion model: the platform
  *                rocks, the gyroscope reports the rate of that rocking and the
  *                accelerometer reports gravity projected onto the tilted axes
- *                plus heave. Rougher seas in stronger wind.
+ *                plus heave. Sea state drifts slowly on its own — waves are
+ *                independent of anything this rig measures.
  *   timeStep     sequential sample counter for this run
  *
  * ── Pitch commands ───────────────────────────────────────────────────────
@@ -52,7 +52,7 @@
  *                        telemetry → backend → dashboard
  *
  * A command is an operator override: once given, it HOLDS until another
- * command replaces it. Experiment cycling carries on changing the wind band
+ * command replaces it. Experiment cycling carries on changing the current band
  * and the experiment label, but it no longer drives pitch, and each switch
  * logs that manual pitch is still in effect so the behaviour is never a
  * surprise. Restart the simulator to hand pitch back to the experiments.
@@ -95,39 +95,18 @@ const COMMAND_POLL_MS = parseInt(process.env.SIM_COMMAND_POLL) || 1000;
    ═══════════════════════════════════════════════════════════════════════ */
 
 /**
- * Electrical calibration — SIMULATOR ONLY.
+ * Generated current — SIMULATOR ONLY.
  *
- *   V = I × 41 + 2
+ * With no wind sensor, current is simulated directly rather than derived from a
+ * wind speed. Each experiment defines a band it drifts within; blade pitch then
+ * scales it, so moving the pitch away from its most efficient angle visibly
+ * reduces output and the "Power vs Pitch Angle" analysis still means something.
  *
- * Applied here so that voltage, current and the backend-derived power agree
- * with one another. Multiplying through by I gives P = 41I² + 2I, which is the
- * power relationship the project's engineering notes use.
- *
- * NOT CONFIRMED FOR THE REAL HARDWARE. On the physical rig the INA219 measures
- * bus voltage and current independently, and whether the firmware should report
- * that measured voltage or a voltage derived from current through this
- * calibration is still an open decision. When the bench calibration is done,
- * change these two constants (or replace the relationship entirely) here — the
- * backend needs no change either way, because it only ever multiplies the
- * voltage and current it is given.
+ * Voltage and power are NOT computed here. The backend derives both from the
+ * current reported below, using the single calibration in
+ * src/config/calibration.js. That is deliberate: the constants live in exactly
+ * one place.
  */
-const CAL_SLOPE = 41;      // ohms-ish: volts per amp
-const CAL_INTERCEPT = 2;   // volts at zero current
-
-/**
- * Turbine response — SIMULATOR ONLY.
- *
- * Anchored to this project's stated design point rather than invented: cut-in
- * around 2 m/s, rated at 4 m/s producing a few watts, and an ~8 W generator
- * ceiling approached as the wind rises toward cut-out. Current grows with
- * v^1.5 between cut-in and rated, which is what P ∝ v³ implies once power is
- * dominated by the 41I² term of the calibration below.
- */
-const WIND_CUT_IN = 1.5;    // m/s below which nothing is generated
-const WIND_RATED = 4.0;     // m/s — the design point
-const WIND_CUT_OUT = 9.0;   // m/s — upper end of the operating band
-const CURRENT_RATED = 0.29; // A at rated wind and ideal pitch (≈4 W)
-const CURRENT_MAX = 0.42;   // A near cut-out (≈8 W, the generator's limit)
 const PITCH_OPTIMUM = 4;    // deg — pitch giving the best energy capture here
 const PITCH_FALLOFF = 26;   // deg of departure from optimum that kills output
 
@@ -147,9 +126,9 @@ const WAVE_HEAVE_PERIOD = 10.0; // s
 
 // ─── Experiment definitions (matching seedData.js) ─────────────
 const experiments = [
-    { experimentId: 'EXP-001', pitchAngle: 0, windRange: [2, 4] },
-    { experimentId: 'EXP-002', pitchAngle: 4, windRange: [3, 6] },
-    { experimentId: 'EXP-003', pitchAngle: 20, windRange: [5, 8] },
+    { experimentId: 'EXP-001', pitchAngle: 0, currentRange: [0.02, 0.16] },
+    { experimentId: 'EXP-002', pitchAngle: 4, currentRange: [0.10, 0.30] },
+    { experimentId: 'EXP-003', pitchAngle: 20, currentRange: [0.12, 0.26] },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -170,40 +149,23 @@ function noise(sigma) {
 }
 
 /**
- * Generated current for a given wind speed and blade pitch — SIMULATOR ONLY.
- * Below cut-in nothing is produced; between cut-in and rated the response
- * grows faster than linearly; pitch away from the optimum reduces capture.
+ * How efficiently the blades convert at a given pitch — SIMULATOR ONLY.
+ * Peaks at PITCH_OPTIMUM and falls away either side, never below 0.15.
  */
-function currentFor(windSpeed, pitchAngle) {
-    if (windSpeed <= WIND_CUT_IN) return 0;
-
-    let base;
-    if (windSpeed <= WIND_RATED) {
-        // Below rated: rises as v^1.5 from cut-in to the design point.
-        const span = (windSpeed - WIND_CUT_IN) / (WIND_RATED - WIND_CUT_IN);
-        base = CURRENT_RATED * Math.pow(span, 1.5);
-    } else {
-        // Above rated: output is increasingly limited, approaching the
-        // generator's ceiling rather than continuing to climb steeply.
-        const span = clamp((windSpeed - WIND_RATED) / (WIND_CUT_OUT - WIND_RATED), 0, 1);
-        base = CURRENT_RATED + (CURRENT_MAX - CURRENT_RATED) * span;
-    }
-
+function pitchEfficiency(pitchAngle) {
     const offset = (pitchAngle - PITCH_OPTIMUM) / PITCH_FALLOFF;
-    const pitchEfficiency = clamp(1 - offset * offset, 0.15, 1);
-
-    return base * pitchEfficiency;
+    return clamp(1 - offset * offset, 0.15, 1);
 }
 
 // ─── Simulator state ──────────────────────────────────────────
 let expIndex = 0;
 let exp = experiments[expIndex];
 
-let windSpeed = (exp.windRange[0] + exp.windRange[1]) / 2;
-let gustBias = 0;                  // slow-moving offset on top of the drift
+let baseCurrent = (exp.currentRange[0] + exp.currentRange[1]) / 2;
 let pitchAngle = exp.pitchAngle;   // actual blade pitch, ramps toward the set point
 let current = 0;
 let yawRate = 0;                   // deg/s, slow wandering heading rate
+let seaState = 0.4;                // 0–1, drifts on its own; waves are not measured
 
 let timeStep = 0;                  // sequential sample index for this run
 const startedAt = Date.now();
@@ -231,24 +193,18 @@ function nextTick() {
     const dt = SIM_INTERVAL / 1000;              // seconds since the last sample
     const elapsed = (Date.now() - startedAt) / 1000;
 
-    // Cycle experiment. The wind band changes immediately; blade pitch does
+    // Cycle experiment. The current band changes immediately; blade pitch does
     // not — it slews toward the new set point over the following seconds.
     if (tickCount % TICKS_PER_EXPERIMENT === 0) {
         expIndex = (expIndex + 1) % experiments.length;
         exp = experiments[expIndex];
-        windSpeed = clamp(windSpeed, exp.windRange[0], exp.windRange[1]);
+        baseCurrent = clamp(baseCurrent, exp.currentRange[0], exp.currentRange[1]);
         if (commandedPitch !== null) {
-            console.log(`\n🔄 Switched to ${exp.experimentId} (wind=${exp.windRange[0]}–${exp.windRange[1]} m/s) — pitch stays at the commanded ${commandedPitch}°, not ${exp.experimentId}'s ${exp.pitchAngle}°`);
+            console.log(`\n🔄 Switched to ${exp.experimentId} (I=${exp.currentRange[0]}–${exp.currentRange[1]} A) — pitch stays at the commanded ${commandedPitch}°, not ${exp.experimentId}'s ${exp.pitchAngle}°`);
         } else {
-            console.log(`\n🔄 Switched to ${exp.experimentId} (pitch → ${exp.pitchAngle}°, wind=${exp.windRange[0]}–${exp.windRange[1]} m/s)`);
+            console.log(`\n🔄 Switched to ${exp.experimentId} (pitch → ${exp.pitchAngle}°, I=${exp.currentRange[0]}–${exp.currentRange[1]} A)`);
         }
     }
-
-    // ── Wind: smooth drift plus a slow gust envelope ──────────────────
-    const [windMin, windMax] = exp.windRange;
-    gustBias = drift(gustBias, -0.6, 0.6, 0.03);
-    windSpeed = drift(windSpeed, windMin, windMax, 0.12);
-    const windNow = clamp(windSpeed + gustBias, windMin * 0.85, windMax * 1.1);
 
     // ── Blade pitch: slew toward the current set point ────────────────
     // A dashboard command takes precedence over the experiment's own angle.
@@ -271,18 +227,20 @@ function nextTick() {
     // Stepper position follows the pitch the mechanism is actually holding.
     const stepperPosition = Math.round(pitchReported * STEPS_PER_DEGREE);
 
-    // ── Electrical: wind → current → voltage (calibration above) ──────
-    const currentTarget = currentFor(windNow, pitchReported);
+    // ── Electrical: current only ──────────────────────────────────────
+    // Voltage and power are NOT produced here — the backend derives both from
+    // this current using the confirmed calibration.
+    const [iMin, iMax] = exp.currentRange;
+    baseCurrent = drift(baseCurrent, iMin, iMax, 0.006);
+    const currentTarget = baseCurrent * pitchEfficiency(pitchReported);
     // First-order lag so current does not snap to the target instantly.
     current += (currentTarget - current) * clamp(dt * 3, 0, 1);
     const currentNow = Math.max(0, current + noise(0.002));
-    const voltageNow = currentNow > 0
-        ? CAL_SLOPE * currentNow + CAL_INTERCEPT
-        : 0;
 
     // ── Platform motion: wave-driven rocking of the floating spar ─────
-    // Rougher water in stronger wind.
-    const seaState = clamp((windNow - windMin) / Math.max(0.1, windMax - windMin), 0, 1);
+    // Sea state is its own slowly-changing quantity. Waves are not measured by
+    // this rig and are not derived from anything it does measure.
+    seaState = drift(seaState, 0, 1, 0.004);
     const rollAmp = 0.6 + 1.8 * seaState;    // degrees
     const platPitchAmp = 0.4 + 1.3 * seaState;
     const heaveAmp = 0.02 + 0.05 * seaState; // g
@@ -316,10 +274,8 @@ function nextTick() {
         experimentId: exp.experimentId,
         source: 'simulator',
         timeStep,
-        windSpeed: round(windNow, 3),
         pitchAngle: pitchReported,
         stepperPosition,
-        voltage: round(voltageNow, 3),
         current: round(currentNow, 4),
         gyroX: round(gyroX, 3),
         gyroY: round(gyroY, 3),
@@ -327,7 +283,8 @@ function nextTick() {
         accelerometerX: round(accelerometerX, 4),
         accelerometerY: round(accelerometerY, 4),
         accelerometerZ: round(accelerometerZ, 4),
-        // power is NOT included — backend calculates it
+        // voltage and power are NOT included — the backend derives both from
+        // current: V = I × 41 + 1.5 and P = I² × 41 + 1.5·I
         // timestamp is NOT included — the backend stamps arrival time, which is
         // also what will happen with the ESP32 (it has no real-time clock)
     };
@@ -359,10 +316,8 @@ async function send(payload) {
             console.log(
                 `  📊 ${sendCount} sent (${elapsed}s) | ` +
                 `${payload.experimentId} | step=${payload.timeStep} | ` +
-                `wind=${payload.windSpeed.toFixed(2)} m/s | ` +
                 `pitch=${payload.pitchAngle.toFixed(1)}° | ` +
-                `V=${payload.voltage.toFixed(2)} | ` +
-                `I=${payload.current.toFixed(3)} | ` +
+                `I=${payload.current.toFixed(3)} A | ` +
                 `gyro=(${payload.gyroX.toFixed(2)}, ${payload.gyroY.toFixed(2)}, ${payload.gyroZ.toFixed(2)})`
             );
         }

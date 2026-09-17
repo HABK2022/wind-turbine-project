@@ -45,6 +45,26 @@ npm start
 npm run seed
 ```
 
+## Telemetry Contract
+
+There is **no wind sensor on this rig**, so wind speed is not measured, sent, stored or
+displayed. A telemetry record carries:
+
+`experimentId`, `source`, `timestamp`, `timeStep`, `voltage`, `current`, `power`,
+`pitchAngle`, `stepperPosition`, `gyroX/Y/Z`, `accelerometerX/Y/Z`
+
+The data source reports **current**; it does not send `voltage` or `power`. The backend
+derives both from the reported current using the confirmed calibration:
+
+```
+V = I × 41 + 1.5
+P = I² × 41 + 1.5·I
+```
+
+Power is **not** computed as voltage × current, and no such relationship is checked
+anywhere. Both constants live in a single file, `src/config/calibration.js` — change them
+there when the hardware team supplies calibrated values, and nowhere else.
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
@@ -83,10 +103,10 @@ there is no encoder. The reported position arrives separately as `pitchAngle` in
 
 The seed script generates **SIMULATED DATA** across 3 experiments:
 
-| Experiment | Pitch | Wind Range |
-|------------|-------|------------|
-| EXP-001 | 0° | 2–4 m/s |
-| EXP-002 | 4° | 3–6 m/s |
-| EXP-003 | 20° | 5–8 m/s |
+| Experiment | Pitch | Current Band |
+|------------|-------|--------------|
+| EXP-001 | 0° | 0.02–0.16 A |
+| EXP-002 | 4° | 0.10–0.30 A |
+| EXP-003 | 20° | 0.12–0.26 A |
 
 All seeded records have `source: "simulator"`.
