@@ -48,6 +48,7 @@ const validateTelemetry = (req, res, next) => {
         }
     }
 
+    
     // Required numeric fields
     if (pitchAngle === undefined || pitchAngle === null) {
         errors.push('pitchAngle is required');
